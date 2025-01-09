@@ -228,7 +228,8 @@ bool GridCalibrationTargetAprilgrid::computeObservation(
     for (unsigned i = 0; i < detections.size(); i++)
       for (unsigned j = 0; j < 4; j++) {
         //raw apriltag corners
-        //cv::circle(imageCopy1, cv::Point2f(detections[i].p[j].first, detections[i].p[j].second), 2, CV_RGB(255,0,0), 1);
+        // changed: comment out
+        cv::circle(imageCopy1, cv::Point2f(detections[i].p[j].first, detections[i].p[j].second), 2, CV_RGB(255,0,0), 1);
 
         //subpixel refined corners
         cv::circle(
@@ -244,7 +245,7 @@ bool GridCalibrationTargetAprilgrid::computeObservation(
       }
 
     cv::imshow("Aprilgrid: Tag corners", imageCopy1);  // OpenCV call
-    cv::waitKey(1);
+    //cv::waitKey(0);
 
     /* copy image for modification */
     cv::Mat imageCopy2 = image.clone();
@@ -260,7 +261,7 @@ bool GridCalibrationTargetAprilgrid::computeObservation(
     }
 
     cv::imshow("Aprilgrid: Tag detection", imageCopy2);  // OpenCV call
-    cv::waitKey(1);
+    cv::waitKey(0);
 
     //if success is false exit here (delayed exit if _options.showExtractionVideo=true for debugging)
     if (!success)

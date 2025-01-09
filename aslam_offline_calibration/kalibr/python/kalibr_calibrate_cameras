@@ -197,6 +197,7 @@ def main():
 
     if parsed.verbose:
         obsdb.printTable()
+        obsdb.saveData()
     
     #initialize the calibration graph
     graph = kcc.MulticamCalibrationGraph(obsdb)

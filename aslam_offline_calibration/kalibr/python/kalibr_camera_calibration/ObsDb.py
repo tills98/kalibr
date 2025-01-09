@@ -158,8 +158,27 @@ class ObservationDatabase(object):
             for cam_id in range(0, self.numCameras()):
                 try:
                     numCorners = len(self.targetViews[time][cam_id]['observed_corners'])
+                    corners = self.targetViews[time][cam_id]['observed_corners']
                 except KeyError:
                     numCorners = "-"
+                    corners = []
                 print("\t", numCorners, end=' ')
+                print("\t", type(corners))
+                print("\t", corners[0])
             print("")
+
+    def saveData(self):
+        #sort for time
+        times_sorted = np.sort(list(self.targetViews.keys()))
+        
+        for time in times_sorted:
+            for cam_id in range(0, self.numCameras()):
+                try:
+                    numCorners = len(self.targetViews[time][cam_id]['observed_corners'])
+                    corners = self.targetViews[time][cam_id]['observed_corners']
+                except KeyError:
+                    numCorners = "-"
+                    corners = []
+
+        
 
