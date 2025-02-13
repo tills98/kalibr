@@ -1,6 +1,7 @@
 #include <aslam/backend/TransformationExpressionNode.hpp>
 #include <sm/kinematics/transformations.hpp>
 #include <Eigen/Dense>
+#include <typeinfo>
 
 namespace aslam {
   namespace backend {
@@ -12,7 +13,12 @@ namespace aslam {
 
     TransformationExpressionNode::~TransformationExpressionNode(){}
 
-    Eigen::Matrix4d TransformationExpressionNode::toTransformationMatrix(){ return toTransformationMatrixImplementation(); }
+    Eigen::Matrix4d TransformationExpressionNode::toTransformationMatrix(){
+      std::cout << "TransformationExpressionNode::toTransformationMatrix " << typeid(this).name() << std::endl;
+      Eigen::Matrix4d x = toTransformationMatrixImplementation();
+      std::cout << "after TransformationExpressionNode::toTransformationMatrix " << std::endl;
+      return x;
+    }
 
     void TransformationExpressionNode::evaluateJacobians(JacobianContainer & outJacobians) const
     {
@@ -53,8 +59,14 @@ namespace aslam {
 
     Eigen::Matrix4d TransformationExpressionNodeMultiply::toTransformationMatrixImplementation()
     {
+      std::cout << "TransformationExpressionNodeMultiply::toTransformationMatrixImplementation " << std::endl;
+      std::cout << "_lhs" << _lhs << std::endl;
+      std::cout << "_rhs"  << _rhs << std::endl;
       _T_lhs = _lhs->toTransformationMatrix();
+      std::cout << "_T_lhs" << std::endl;
       _T_rhs = _rhs->toTransformationMatrix();
+      std::cout << "_T_rhs" << std::endl;
+
       return  _T_lhs * _T_rhs;
     }
 
@@ -85,6 +97,7 @@ namespace aslam {
 
     Eigen::Matrix4d TransformationExpressionNodeInverse::toTransformationMatrixImplementation()
     {
+      std::cout << "TransformationExpressionNodeInverse::toTransformationMatrixImplementation" << std::endl;
       _T = _dvTransformation->toTransformationMatrix().inverse();
       return  _T;
     }
@@ -109,7 +122,10 @@ namespace aslam {
       TransformationExpressionNodeConstant::~TransformationExpressionNodeConstant(){}
 
     
-      Eigen::Matrix4d TransformationExpressionNodeConstant::toTransformationMatrixImplementation(){ return _T; }
+      Eigen::Matrix4d TransformationExpressionNodeConstant::toTransformationMatrixImplementation(){
+        std::cout << "TransformationExpressionNodeConstant::toTransformationMatrixImplementation" << std::endl;
+        return _T;
+      }
   void TransformationExpressionNodeConstant::evaluateJacobiansImplementation(JacobianContainer & /* outJacobians */) const{}
   void TransformationExpressionNodeConstant::evaluateJacobiansImplementation(JacobianContainer & /* outJacobians */, const Eigen::MatrixXd & /* applyChainRule */) const{}
   void TransformationExpressionNodeConstant::getDesignVariablesImplementation(DesignVariable::set_t & /* designVariables */) const{}

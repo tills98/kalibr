@@ -35,6 +35,8 @@ class CameraGeometry(object):
         self.model = cameraModel
         if geometry is None:
             self.geometry = cameraModel.geometry()
+        else:
+            self.geometry = geometry
         
         if not type(self.geometry) == cameraModel.geometry:
             raise RuntimeError("The type of geometry passed in \"%s\" does not match the model type \"%s\"" % (type(geometry),type(cameraModel.geometry)))
@@ -45,7 +47,10 @@ class CameraGeometry(object):
         self.isGeometryInitialized = False
 
         #create target detector
-        self.ctarget = TargetDetector(targetConfig, self.geometry, showCorners=verbose)
+        if targetConfig is not None:
+            self.ctarget = TargetDetector(targetConfig, self.geometry, showCorners=verbose)
+        else:
+            self.ctarget = None
 
     def setDvActiveStatus(self, projectionActive, distortionActive, shutterActice):
         self.dv.projectionDesignVariable().setActive(projectionActive)
@@ -132,8 +137,8 @@ class CalibrationTarget(object):
         # Create design variables and expressions for all target points.
         P_t_dv = []
         P_t_ex = []
-        for i in range(0,self.target.size()):
-            p_t_dv = aopt.HomogeneousPointDv(sm.toHomogeneous(self.target.point(i)));
+        for i in range(0,self.target.size()): # target.size() = rows * cols (for aprilgrid 2 * rows * 2 * cols [corners])
+            p_t_dv = aopt.HomogeneousPointDv(sm.toHomogeneous(self.target.point(i)));  # self.target.point(i) is a point from the target expressed in the target frame (_points in GridCalibrationTargetAprilgrid.(hpp/cpp))
             p_t_dv.setActive(estimateLandmarks)
             p_t_ex = p_t_dv.toExpression()
             P_t_dv.append(p_t_dv)
@@ -169,7 +174,7 @@ class CalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProblem):
                 rval.addDesignVariable(baseline_dv.getDesignVariable(i), CALIBRATION_GROUP_ID)
         
         #3. add landmark DVs
-        for p in target.P_t_dv:
+        for p in target.P_t_dv: # P_t_dv = [p_t_dv] where p_t_dv = aopt.HomogeneousPointDv(points(i)), the corner points in its 3D world (x, y, 0)
             rval.addDesignVariable(p,LANDMARK_GROUP_ID)
         
         #4. add camera DVs
@@ -202,13 +207,13 @@ class CalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProblem):
             invR = np.linalg.inv(R)
             
             rval.rerrs[cam_id] = list()
-            for i in range(0,len(target.P_t_ex)):
+            for i in range(0,len(target.P_t_ex)): # P_t_ex = [p_t_ex] where p_t_ex = p_t_dv.toExpression() comes from HomogeneousExpression
                 p_target = target.P_t_ex[i]
                 valid, y = obs.imagePoint(i)
                 if valid:
                     rerr_cnt+=1
                     # Create an error term.
-                    rerr = camera.model.reprojectionError(y, invR, T_camN_calib * p_target, camera.dv)
+                    rerr = camera.model.reprojectionError(y, invR, T_camN_calib * p_target, camera.dv) # what does camera.model.reprojectionError() do?
                     rerr.idx = i
                     
                     #add blake-zisserman mest
@@ -270,6 +275,15 @@ class CameraCalibration(object):
         return self.baselines[i]
     
     def addTargetView(self, timestamp, rig_observations, T_tc_guess, force=False):
+        """
+        called for every timestamp with all observations at the given timestamp and the T_targetToCamera_guess
+
+        :param timestamp: given timestamp
+        :param rig_observations: observations at timestamp
+        :param T_tc_guess: Transformation matrix guess from target to camera
+        :param force:
+        :return:
+        """
         #create the problem for this batch and try to add it 
         batch_problem = CalibrationTargetOptimizationProblem.fromTargetViewObservations(self.cameras, self.target, self.baselines, timestamp, T_tc_guess, rig_observations, useBlakeZissermanMest=self.useBlakeZissermanMest)
         self.estimator_return_value = self.estimator.addBatch(batch_problem, force)

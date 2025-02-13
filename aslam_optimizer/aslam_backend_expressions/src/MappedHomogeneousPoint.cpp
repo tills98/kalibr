@@ -39,6 +39,7 @@ namespace aslam {
     
     Eigen::Vector4d MappedHomogeneousPoint::toHomogeneousImplementation() const
     {
+      std::cout << "MappedHomogeneousPoint::toHomogeneousImplementation" << std::endl;
       return _p;
     }
     

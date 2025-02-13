@@ -192,11 +192,12 @@ namespace aslam {
             SolutionReturnValue srv;
             _p_J = 0.0;
 
-            //std::cout << "Evaluate error for the first time\n";
+            std::cout << "Evaluate error for the first time\n";
             // This sets _J
             timeErr.start();
             evaluateError(true);
             timeErr.stop();
+            std::cout << "...done.\n";
             _p_J = _J;
             srv.JStart = _p_J;
             // *** while not done

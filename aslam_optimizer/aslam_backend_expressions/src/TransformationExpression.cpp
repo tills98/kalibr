@@ -49,6 +49,7 @@ namespace aslam {
 
     Eigen::Matrix4d TransformationExpression::toTransformationMatrix() const
     {
+      std::cout << "TransformationExpression::toTransformationMatrix" << std::endl;
       return _root->toTransformationMatrix();
     }
   

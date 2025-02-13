@@ -6,6 +6,7 @@
 #include <aslam/backend/CameraDesignVariable.hpp>
 #include <boost/shared_ptr.hpp>
 #include <aslam/Frame.hpp>
+#include <typeinfo>
 
 namespace aslam {
 namespace backend {

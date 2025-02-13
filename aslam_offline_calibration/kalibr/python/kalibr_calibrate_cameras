@@ -258,7 +258,7 @@ def main():
                 sm.logWarn("Plotting during calibration. Things may be very slow (but you might learn something).")
 
             #shuffle the views
-            timestamps = obsdb.getAllViewTimestamps()
+            timestamps = obsdb.getAllViewTimestamps()    # timestamps = [self.targetViews.keys()], self.targetViews[timestamp][cam_id] = dict('obs_id', 'observed_corners')
             if not parsed.noShuffle:
                 random.shuffle(timestamps)
 
@@ -269,9 +269,9 @@ def main():
             for view_id, timestamp in enumerate(timestamps):
                 
                 #add new batch problem
-                obs_tuple = obsdb.getAllObsAtTimestamp(timestamp)    
+                obs_tuple = obsdb.getAllObsAtTimestamp(timestamp)  # [(cam_id, obs)]
                 est_baselines = list()
-                for bidx, baseline in enumerate(calibrator.baselines):
+                for bidx, baseline in enumerate(calibrator.baselines): # no baselines in calibrator if only one camera is used
                     est_baselines.append( sm.Transformation(baseline.T()) )
                 T_tc_guess = graph.getTargetPoseGuess(timestamp, cameraList, est_baselines)
                                

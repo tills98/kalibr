@@ -17,6 +17,7 @@ namespace aslam {
 
         Eigen::Matrix4d BSplineTransformationExpressionNode::toTransformationMatrixImplementation()
         {
+            std::cout << "BSplineTransformationExpressionNode::toTransformationMatrixImplementation" << std::endl;
             return _spline->transformation(_time);
         }
 
@@ -444,6 +445,7 @@ namespace aslam {
         
         Eigen::Matrix4d TransformationTimeOffsetExpressionNode::toTransformationMatrixImplementation()
         {
+            std::cout << "TransformationTimeOffsetExpressionNode::toTransformationMatrixImplementation" << std::endl;
         	SM_ASSERT_GE_LT(aslam::Exception, _time.toScalar(), _bufferTmin, _bufferTmax, "Spline Coefficient Buffer Exceeded. Set larger buffer margins!");
             return _spline->spline().transformation(_time.toScalar());
         }

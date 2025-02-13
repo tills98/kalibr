@@ -11,14 +11,20 @@ namespace aslam {
 
     void LinearSystemSolver::evaluateErrors(size_t threadId, size_t startIdx, size_t endIdx, bool useMEstimator)
     {
+      std::cout << "LinearSystemSolver::evaluateErrors " << threadId << " " << startIdx << " " << endIdx << " " << useMEstimator << std::endl;
       SM_ASSERT_LT_DBG(Exception, threadId, _threadLocalErrors.size(), "Index out of bounds in thread " << threadId);
       SM_ASSERT_LE_DBG(Exception, endIdx, _errorTerms.size(), "Index out of bounds in thread " << threadId);
+      std::cout << "Behind assertions" << std::endl;
       Eigen::VectorXd e;
       for (size_t i = startIdx; i < endIdx; ++i) {
         SM_ASSERT_TRUE_DBG(Exception, _errorTerms[i] != NULL, "Null error term " << i);
+        std::cout << " error term " << i << std::endl;
         _threadLocalErrors[threadId] += _errorTerms[i]->evaluateError();
+        std::cout << " eval error of error term" << std::endl;
         _errorTerms[i]->getWeightedError(e, useMEstimator);
+        //std::cout << " get weighted error" << std::endl;
         _e.segment(_errorTerms[i]->rowBase(), _errorTerms[i]->dimension()) = -e;
+        //std::cout << " segment" << std::endl;
       }
     }
 
@@ -80,12 +86,18 @@ namespace aslam {
 
     double LinearSystemSolver::evaluateError(size_t nThreads, bool useMEstimator)
     {
+      std::cout << "LinearSystemSolver::evaluateError nThreads " << nThreads << std::endl;
       nThreads = std::max((size_t)1, nThreads);
+      std::cout << "LinearSystemSolver::evaluateError nThreads " << nThreads << std::endl;
       _threadLocalErrors.clear();
+      std::cout << "thread local errors clear" << std::endl;
       _threadLocalErrors.resize(nThreads, 0.0);
+      std::cout << "thread local errors resize" << std::endl;
       setupThreadedJob(boost::bind(&LinearSystemSolver::evaluateErrors, this, _1, _2, _3, _4), nThreads, useMEstimator);
+      std::cout << "setup" << std::endl;
       // Gather the squared error results from the multiple threads.
       double error = 0.0;
+      std::cout << "error = " << error << std::endl;
       for (unsigned i = 0; i < _threadLocalErrors.size(); ++i)
         error += _threadLocalErrors[i];
       return error;

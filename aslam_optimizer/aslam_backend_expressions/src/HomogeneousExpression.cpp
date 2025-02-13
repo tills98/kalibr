@@ -2,6 +2,7 @@
 #include <sm/boost/null_deleter.hpp>
 #include <aslam/backend/HomogeneousExpressionNode.hpp>
 #include <aslam/backend/EuclideanExpressionNode.hpp>
+#include <typeinfo>
 
 namespace aslam {
   namespace backend {
@@ -39,6 +40,8 @@ namespace aslam {
 
     Eigen::Vector4d HomogeneousExpression::toHomogeneous() const
     {
+      std::cout << "HomogeneousExpression::toHomogeneous" << std::endl;
+      std::cout << typeid(_root).name() << std::endl;
       return _root->toHomogeneous();
     }
 

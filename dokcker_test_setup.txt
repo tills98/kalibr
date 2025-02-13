@@ -1,0 +1,9 @@
+GDB:
+/bin/bash
+-c
+"source /catkin_ws/devel/setup.bash && cd /catkin_ws && cd /catkin_ws/src/kalibr && gdb -ex=run --args python3 aslam_offline_calibration/kalibr/python/kalibr_joint_calibration"
+
+Build & GDB:
+/bin/bash
+-c
+"source /catkin_ws/devel/setup.bash && cd /catkin_ws && catkin build -j$(nproc --ignore 6) aslam_cv_backend aslam_cv_error_terms aslam_backend_expressions && cd /catkin_ws/src/kalibr && gdb -ex=run --args python3 aslam_offline_calibration/kalibr/python/kalibr_joint_calibration"
