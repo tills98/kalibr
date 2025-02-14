@@ -15,7 +15,22 @@ namespace aslam {
 
     Eigen::Matrix4d TransformationExpressionNode::toTransformationMatrix(){
       std::cout << "TransformationExpressionNode::toTransformationMatrix " << typeid(this).name() << std::endl;
-      Eigen::Matrix4d x = toTransformationMatrixImplementation();
+      Eigen::Matrix4d x;
+      Eigen::Matrix4d (TransformationExpressionNode::*funcPtr)() =
+            &TransformationExpressionNode::toTransformationMatrixImplementation;
+
+      if (funcPtr) {
+        std::cout << "yes it should exist" << std::endl;
+      } else {
+        std::cout << "no it not exist" << std::endl;
+      }
+
+      try {
+        std::cout << "TransformationExpressionNode::toTransformationMatrix inside try " << std::endl;
+      	x = toTransformationMatrixImplementation();
+      } catch (Exception &e) {
+      	std::cout << "Oups..." << std::endl;
+      }
       std::cout << "after TransformationExpressionNode::toTransformationMatrix " << std::endl;
       return x;
     }

@@ -188,18 +188,20 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
             print("R_t1_t2", R_t1_t2)
             print("t_t1_t2", t_t1_t2)
 
+            sm.r2quat(R_target1_cam)
+            sm.r2quat(R_target2_cam)
+            sm.r2quat(R_t1_t2)
+
             T_target1_cam = build_T(R_target1_cam, t_target1_cam)
             T_target2_cam = build_T(R_target2_cam, t_target2_cam)
             T_t1_t2 = build_T(R_t1_t2, t_t1_t2)
 
             # create design variables
+            # T_target1_cam_dv = [T_target_cam_dv for T_target_cam, T_target_cam_dv in Ts_target_cam_dv if np.array_equal(T_target_cam, T_target1_cam)][0]
             T_target1_cam_dv = [T_target_cam_dv for T_target_cam, T_target_cam_dv in Ts_target_cam_dv if np.array_equal(T_target_cam, T_target1_cam)][0]
             T_target1_cam_ex = T_target1_cam_dv.toExpression()
             T_target2_cam_dv = [T_target_cam_dv for T_target_cam, T_target_cam_dv in Ts_target_cam_dv if np.array_equal(T_target_cam, T_target2_cam)][0]
             T_target2_cam_ex = T_target2_cam_dv.toExpression()
-
-            print("sm r2quat", sm.r2quat(R_t1_t2))
-            print("R^-1 @ R", np.linalg.inv(R_t1_t2) @ R_t1_t2)
 
             T_t1_t2_dv = aopt.TransformationDv(sm.Transformation(T_t1_t2))
             T_t1_t2_ex = T_t1_t2_dv.toExpression()
@@ -240,10 +242,12 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
                 p_t1_w = np.ones((4,1))
                 p_t1_w[:3,0] = p_t1
 
-                test_ex = T_target2_cam_ex * T_target1_cam_ex * p_t1_ex
+                #test_ex = T_target2_cam_ex * T_t1_t2_ex * p_t1_ex
 
+                #projected_y_ex = T_target1_cam_ex * p_t1_ex
                 projected_y_ex = T_target2_cam_ex * T_t1_t2_ex * p_t1_ex
-                print("   projected_y_ex homogeneous:", projected_y_ex.toHomogeneous())
+                #print("   test_ex homogeneous:", test_ex.toHomogeneous())
+                #print("   projected_y_ex homogeneous:", projected_y_ex.toHomogeneous())
                 # projected_y_ex = T_target1_cam_ex * p_t1_ex
                 projected_y = T_target2_cam @ T_t1_t2 @ p_t1_w
                 # print("   test_ex:", test_ex.toHomogeneous())
