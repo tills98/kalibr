@@ -20,7 +20,9 @@ namespace aslam {
             &TransformationExpressionNode::toTransformationMatrixImplementation;
 
       if (funcPtr) {
-        std::cout << "yes it should exist" << std::endl;
+        std::cout << "yes it should exist " << typeid(funcPtr).name() << std::endl;
+        Eigen::Matrix4d x = (this->*funcPtr)();
+        std::cout << "okay it does things..." << std::endl;
       } else {
         std::cout << "no it not exist" << std::endl;
       }
