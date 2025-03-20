@@ -14,27 +14,7 @@ namespace aslam {
     TransformationExpressionNode::~TransformationExpressionNode(){}
 
     Eigen::Matrix4d TransformationExpressionNode::toTransformationMatrix(){
-      std::cout << "TransformationExpressionNode::toTransformationMatrix " << typeid(this).name() << std::endl;
-      Eigen::Matrix4d x;
-      Eigen::Matrix4d (TransformationExpressionNode::*funcPtr)() =
-            &TransformationExpressionNode::toTransformationMatrixImplementation;
-
-      if (funcPtr) {
-        std::cout << "yes it should exist " << typeid(funcPtr).name() << std::endl;
-        Eigen::Matrix4d x = (this->*funcPtr)();
-        std::cout << "okay it does things..." << std::endl;
-      } else {
-        std::cout << "no it not exist" << std::endl;
-      }
-
-      try {
-        std::cout << "TransformationExpressionNode::toTransformationMatrix inside try " << std::endl;
-      	x = toTransformationMatrixImplementation();
-      } catch (Exception &e) {
-      	std::cout << "Oups..." << std::endl;
-      }
-      std::cout << "after TransformationExpressionNode::toTransformationMatrix " << std::endl;
-      return x;
+      return toTransformationMatrixImplementation();
     }
 
     void TransformationExpressionNode::evaluateJacobians(JacobianContainer & outJacobians) const
@@ -76,13 +56,8 @@ namespace aslam {
 
     Eigen::Matrix4d TransformationExpressionNodeMultiply::toTransformationMatrixImplementation()
     {
-      std::cout << "TransformationExpressionNodeMultiply::toTransformationMatrixImplementation " << std::endl;
-      std::cout << "_lhs" << _lhs << std::endl;
-      std::cout << "_rhs"  << _rhs << std::endl;
       _T_lhs = _lhs->toTransformationMatrix();
-      std::cout << "_T_lhs" << std::endl;
       _T_rhs = _rhs->toTransformationMatrix();
-      std::cout << "_T_rhs" << std::endl;
 
       return  _T_lhs * _T_rhs;
     }
@@ -114,7 +89,6 @@ namespace aslam {
 
     Eigen::Matrix4d TransformationExpressionNodeInverse::toTransformationMatrixImplementation()
     {
-      std::cout << "TransformationExpressionNodeInverse::toTransformationMatrixImplementation" << std::endl;
       _T = _dvTransformation->toTransformationMatrix().inverse();
       return  _T;
     }
@@ -140,7 +114,6 @@ namespace aslam {
 
     
       Eigen::Matrix4d TransformationExpressionNodeConstant::toTransformationMatrixImplementation(){
-        std::cout << "TransformationExpressionNodeConstant::toTransformationMatrixImplementation" << std::endl;
         return _T;
       }
   void TransformationExpressionNodeConstant::evaluateJacobiansImplementation(JacobianContainer & /* outJacobians */) const{}

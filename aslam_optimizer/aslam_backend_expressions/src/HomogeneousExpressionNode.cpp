@@ -20,7 +20,6 @@ namespace aslam {
     /// \brief Evaluate the homogeneous matrix.
     Eigen::Vector4d HomogeneousExpressionNode::toHomogeneous() const
     {
-      std::cout << "HomogeneousExpressionNode::toHomogeneous" << std::endl;
       return toHomogeneousImplementation();
     }
 
@@ -63,11 +62,8 @@ namespace aslam {
     
     Eigen::Vector4d HomogeneousExpressionNodeMultiply::toHomogeneousImplementation() const
     {
-      std::cout << "HomogeneousExpressionNodeMultiply::toHomogeneousImplementation" << std::endl;
       _T_lhs = _lhs->toTransformationMatrix();
-      std::cout << "_T_lhs" << std::endl;
       _p_rhs = _rhs->toHomogeneous();
-      std::cout << "_p_lhs" << std::endl;
 
       return _T_lhs * _p_rhs;
     }
@@ -99,7 +95,6 @@ namespace aslam {
 
 
       Eigen::Vector4d HomogeneousExpressionNodeConstant::toHomogeneousImplementation() const{
-        std::cout << "HomogeneousExpressionNodeConstant::toHomogeneousImplementation" << std::endl;
         return _p;
       }
       void HomogeneousExpressionNodeConstant::evaluateJacobiansImplementation(JacobianContainer & /* outJacobians */) const{}
@@ -118,7 +113,6 @@ namespace aslam {
 
 
   Eigen::Vector4d HomogeneousExpressionNodeEuclidean::toHomogeneousImplementation() const {
-    std::cout << "HomogeneousExpressionNodeEuclidean::toHomogeneousImplementation" << std::endl;
     return sm::kinematics::toHomogeneous(_p->toEuclidean());
   }
 

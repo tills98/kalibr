@@ -18,15 +18,10 @@ namespace aslam {
 
     Eigen::Matrix4d TransformationBasic::toTransformationMatrixImplementation()
     {
-      std::cout << "TransformationBasic::toTransformationMatrixImplementation" << std::endl;
       Eigen::Matrix4d T;
-      std::cout << "TransformationBasic::toTransformationMatrixImplementation after T" << std::endl;
       T.setIdentity();
-      std::cout << "TransformationBasic::toTransformationMatrixImplementation after T.setIdentity()" << std::endl;
       T.topLeftCorner<3,3>() = _rotation->toRotationMatrix();
-      std::cout << "TransformationBasic::toTransformationMatrixImplementation after _rotation->toRotationMatrix()" << std::endl;
       T.topRightCorner<3,1>() = _translation->toEuclidean();
-      std::cout << "TransformationBasic::toTransformationMatrixImplementation after _translation->toEuclidean()" << std::endl;
       return T;
     }
 

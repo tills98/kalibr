@@ -40,8 +40,6 @@ namespace aslam {
 
     Eigen::Vector4d HomogeneousExpression::toHomogeneous() const
     {
-      std::cout << "HomogeneousExpression::toHomogeneous" << std::endl;
-      std::cout << typeid(_root).name() << std::endl;
       return _root->toHomogeneous();
     }
 

@@ -48,20 +48,13 @@ ReprojectionError<F>::~ReprojectionError() {
 
 template<typename F>
 double ReprojectionError<F>::evaluateErrorImplementation() {
-  std::cout << "ReprojectionError<F>::evaluateErrorImplementation()" << std::endl;
   const camera_geometry_t & cam = *_camera.camera();
-  std::cout << "get camera" << std::endl;
 
-  std::cout << "here the problem occurs " << std::endl;
   Eigen::Vector4d p = _point.toHomogeneous();
-  std::cout << "to homogeneous" << std::endl;
   measurement_t hat_y;
-  std::cout << "get hat_y" << std::endl;
   cam.homogeneousToKeypoint(p, hat_y);
-  std::cout << "hom to keyboint" << std::endl;
 
   parent_t::setError(_y - hat_y);
-  std::cout << "set error on parent" << std::endl;
 
   return parent_t::error().dot(parent_t::invR() * parent_t::error());
 }

@@ -150,13 +150,13 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
         for i in range(num_boards):
             glob_rerrs.append([])
 
-        R_combs = itertools.combinations(Rs, 2)
-        t_combs = itertools.combinations(ts, 2)
+        R_combs = list(itertools.combinations(enumerate(Rs), 2))
+        t_combs = list(itertools.combinations(enumerate(ts), 2))
 
-        print("R_combs", R_combs)
-        print("t_combs", t_combs)
+        # print("R_combs", R_combs)
+        # print("t_combs", t_combs)
 
-        Ts_target_cam_dv = []
+        rval.Ts_target_cam = dict()
 
         # add camera design variables to the problem
         for idx, cam in enumerate(cams):
@@ -167,49 +167,88 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
 
         # add all target-to-cam transformations as design variables to our problem
         for board_idx, (R, t) in enumerate(zip(Rs, ts)):
-            T_target_cam = build_T(R, t)
-            T_target_cam_dv = aopt.TransformationDv(sm.Transformation(T_target_cam))
+            sm.r2quat(R)
 
-            Ts_target_cam_dv.append((T_target_cam, T_target_cam_dv))
+            T_target_cam = build_T(R, t)
+            T_target_cam_tf = sm.Transformation(T_target_cam)
+            T_target_cam_dv = aopt.TransformationDv(T_target_cam_tf)
+            T_target_cam_ex = T_target_cam_dv.toExpression()
+
+            T_obj = {
+                "tf": T_target_cam_tf,
+                "dv": T_target_cam_dv,
+                "ex": T_target_cam_ex
+            }
+
+            rval.Ts_target_cam[board_idx] = T_obj
 
             for i in range(0, T_target_cam_dv.numDesignVariables()):
                 rval.addDesignVariable(T_target_cam_dv.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
 
-        # iterate over 2-combinations of the boards
-        rerr_idx = 0
-        for board_idx, (R_comb, t_comb) in enumerate(zip(list(R_combs), list(t_combs))):
-            R_target1_cam = R_comb[0]
-            t_target1_cam = t_comb[0]
-            R_target2_cam = R_comb[1]
-            t_target2_cam = t_comb[1]
+        # add all points as design variables to our problem
+        rval.Ps = dict()
+        for board_idx in range(num_boards):
+            rval.Ps[board_idx] = []
+
+        for board_idx in range(num_boards):
+            P_t_hom, P_t_dv, P_t_ex = cls.build_target_coordinate_dvs(objpoints[board_idx])
+            
+            for i in range(len(P_t_dv)):
+                rval.Ps[board_idx].append({
+                    "hom": P_t_hom[i],
+                    "dv": P_t_dv[i],
+                    "ex": P_t_ex[i]
+                })
+
+            for p_dv in P_t_dv:
+                rval.addDesignVariable(p_dv, LANDMARK_GROUP_ID)
+
+        # add all target-to-target transformations as design variables to our problem
+        rval.Ts_target_target = dict()
+        for (source_R, target_R), (source_t, target_t) in zip(R_combs, t_combs):
+            source_idx = source_R[0]
+            target_idx = target_R[0]
+            
+            R_target1_cam = source_R[1]
+            t_target1_cam = target_t[1]
+            R_target2_cam = target_R[1]
+            t_target2_cam = target_t[1]
 
             rvec_t1_t2, t_t1_t2 = build_between_board_vecs(R_target1_cam, t_target1_cam, R_target2_cam, t_target2_cam)
             R_t1_t2 = cv2.Rodrigues(rvec_t1_t2)[0]
-            print("R_t1_t2", R_t1_t2)
-            print("t_t1_t2", t_t1_t2)
+            # print("R_t1_t2", R_t1_t2)
+            # print("t_t1_t2", t_t1_t2)
 
             sm.r2quat(R_target1_cam)
             sm.r2quat(R_target2_cam)
             sm.r2quat(R_t1_t2)
 
-            T_target1_cam = build_T(R_target1_cam, t_target1_cam)
-            T_target2_cam = build_T(R_target2_cam, t_target2_cam)
             T_t1_t2 = build_T(R_t1_t2, t_t1_t2)
 
-            # create design variables
-            # T_target1_cam_dv = [T_target_cam_dv for T_target_cam, T_target_cam_dv in Ts_target_cam_dv if np.array_equal(T_target_cam, T_target1_cam)][0]
-            T_target1_cam_dv = [T_target_cam_dv for T_target_cam, T_target_cam_dv in Ts_target_cam_dv if np.array_equal(T_target_cam, T_target1_cam)][0]
-            T_target1_cam_ex = T_target1_cam_dv.toExpression()
-            T_target2_cam_dv = [T_target_cam_dv for T_target_cam, T_target_cam_dv in Ts_target_cam_dv if np.array_equal(T_target_cam, T_target2_cam)][0]
-            T_target2_cam_ex = T_target2_cam_dv.toExpression()
-
-            T_t1_t2_dv = aopt.TransformationDv(sm.Transformation(T_t1_t2))
+            # create design variables for the transformation between the two boards
+            T_t1_t2_tf = sm.Transformation(T_t1_t2)
+            T_t1_t2_dv = aopt.TransformationDv(T_t1_t2_tf)
             T_t1_t2_ex = T_t1_t2_dv.toExpression()
 
+            T_obj = {
+                "tf": T_t1_t2_tf,
+                "dv": T_t1_t2_dv,
+                "ex": T_t1_t2_ex
+            }
+
+            rval.Ts_target_target[(source_idx, target_idx)] = T_obj
+
             # add boards-in-between transformations as design variables to our problem
-            # TODO: unsure that this should be there
             for i in range(0, T_t1_t2_dv.numDesignVariables()):
                 rval.addDesignVariable(T_t1_t2_dv.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
+
+        rerr_idx = 0
+
+        # add all reprojection errors to our problem
+        for (s_idx, t_idx), T_obj in rval.Ts_target_target.items():
+            T_t1_t2_ex = T_obj["ex"]
+            T_t1_cam_ex = rval.Ts_target_cam[s_idx]["ex"]
+            T_t2_cam_ex = rval.Ts_target_cam[t_idx]["ex"]
 
             # copied from CameraCalibrator -> CalibrationTargetOptimizationProblem
             # \todo pass in the detector uncertainty somehow.
@@ -217,49 +256,19 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
             R = np.eye(2) * cornerUncertainty * cornerUncertainty
             invR = np.linalg.inv(R)
 
-            rval.rerrs[board_idx] = list()
+            rval.rerrs[s_idx] = list()
 
-            print(f"error definitions for board {board_idx}:")
-            for y, p_t1 in zip(imgpoints[board_idx], objpoints[board_idx]):
-                print(" - reprojection error defintion")
-                cam_id = board_idx
+            for y, p_t1 in zip(imgpoints[s_idx], rval.Ps[s_idx]):
+                cam_id = s_idx
                 cam = cams[cam_id]
 
-                print("   y:", y.reshape((2,1)).shape)
-                print("   p_t1:", p_t1.flatten())
-                print("   R:", R.flatten())
+                p_t1_ex = p_t1["ex"]
 
-                print("   T_target2_cam:", T_target2_cam.shape)
-                print("   T_t1_t2:", T_t1_t2.shape)
+                #projected_y_ex = T_t2_cam_ex * T_t1_t2_ex * p_t1_ex
+                projected_y_ex = T_t1_cam_ex * p_t1_ex
 
-                p_t1_dv = aopt.HomogeneousPointDv(sm.toHomogeneous(p_t1))
-                p_t1_dv.setActive(False)
-                p_t1_ex = p_t1_dv.toExpression()
-
-                # add world point to design variables
-                rval.addDesignVariable(p_t1_dv, LANDMARK_GROUP_ID)
-
-                p_t1_w = np.ones((4,1))
-                p_t1_w[:3,0] = p_t1
-
-                #test_ex = T_target2_cam_ex * T_t1_t2_ex * p_t1_ex
-
-                #projected_y_ex = T_target1_cam_ex * p_t1_ex
-                projected_y_ex = T_target2_cam_ex * T_t1_t2_ex * p_t1_ex
-                #print("   test_ex homogeneous:", test_ex.toHomogeneous())
-                #print("   projected_y_ex homogeneous:", projected_y_ex.toHomogeneous())
-                # projected_y_ex = T_target1_cam_ex * p_t1_ex
-                projected_y = T_target2_cam @ T_t1_t2 @ p_t1_w
-                # print("   test_ex:", test_ex.toHomogeneous())
-                # print("   projected_y:", projected_y)
-
-                projected_y_short = projected_y[:3,0]
-                # print("   projected_y_short:", projected_y_short.flatten())
-
-                # hom_projected_y_short = aopt.HomogeneousPointDv(sm.toHomogeneous(projected_y_short))
-                # print("   hom_projected_y_short.toExpression():", hom_projected_y_short.toExpression().toHomogeneous())
-
-                # Create an error term
+                # y: real image point
+                # projected_y_ex: projected image point
                 rerr = cam.model.reprojectionError(y, invR, projected_y_ex, cam.dv)
                 rerr.idx = rerr_idx
 
@@ -269,11 +278,11 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
                 mest = aopt.BlakeZissermanMEstimator(2.0)
                 rerr.setMEstimatorPolicy(mest)
 
-                glob_rerrs[board_idx].append(rerr)
+                glob_rerrs[s_idx].append(rerr)
 
-                # add error term to the problem
+                # add error term to the problem class
                 rval.addErrorTerm(rerr)
-                rval.rerrs[board_idx].append(rerr)
+                rval.rerrs[s_idx].append(rerr)
 
         return rval
 
@@ -295,43 +304,46 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
 
     @classmethod
     def build_target_coordinate_dvs(cls, objpoints):
+        P_t_hom = []
         P_t_dv = []
         P_t_ex = []
 
         for p in objpoints:
-            p_t_dv = aopt.HomogeneousPointDv(sm.toHomogeneous(p))  # self.target.point(i) is a point from the target expressed in the target frame (_points in GridCalibrationTargetAprilgrid.(hpp/cpp))
+            p_t_hom = sm.toHomogeneous(p)
+            p_t_dv = aopt.HomogeneousPointDv(p_t_hom)  # self.target.point(i) is a point from the target expressed in the target frame (_points in GridCalibrationTargetAprilgrid.(hpp/cpp))
             p_t_dv.setActive(True)
             p_t_ex = p_t_dv.toExpression()
+            P_t_hom.append(p_t_hom)
             P_t_dv.append(p_t_dv)
             P_t_ex.append(p_t_ex)
 
-        return P_t_dv, P_t_ex
+        return P_t_hom, P_t_dv, P_t_ex
 
 
 def main():
     base_path = "/data"
 
     print("load data")
-
+    
     # load intrinsics, extrinsics and 3d points
-    mtx6 = np.load(f"{base_path}/res/mtx6.npy")
-    dist6 = np.load(f"{base_path}/res/dist6.npy")
-    rvecs6 = np.load(f"{base_path}/res/rvecs6.npy")
-    tvecs6 = np.load(f"{base_path}/res/tvecs6.npy")
+    mtx6 = np.load(f"{base_path}/mtx6.npy")
+    dist6 = np.load(f"{base_path}/dist6.npy")
+    rvecs6 = np.load(f"{base_path}/rvecs6.npy")
+    tvecs6 = np.load(f"{base_path}/tvecs6.npy")
     #with open(f"{base_path}/res/objpoints6.pkl", "rb") as f: objpoints6 = pkl.load(f)
     #with open(f"{base_path}/res/imgp6.pkl", "rb") as f: imgp6 = pkl.load(f)
 
-    mtx7 = np.load(f"{base_path}/res/mtx7.npy")
-    dist7 = np.load(f"{base_path}/res/dist7.npy")
-    rvecs7 = np.load(f"{base_path}/res/rvecs7.npy")
-    tvecs7 = np.load(f"{base_path}/res/tvecs7.npy")
+    mtx7 = np.load(f"{base_path}/mtx7.npy")
+    dist7 = np.load(f"{base_path}/dist7.npy")
+    rvecs7 = np.load(f"{base_path}/rvecs7.npy")
+    tvecs7 = np.load(f"{base_path}/tvecs7.npy")
     #with open(f"{base_path}/res/objpoints7.pkl", "rb") as f: objpoints7 = pkl.load(f)
     #with open(f"{base_path}/res/imgp7.pkl", "rb") as f: imgp7 = pkl.load(f)
 
-    mtx8 = np.load(f"{base_path}/res/mtx8.npy")
-    dist8 = np.load(f"{base_path}/res/dist8.npy")
-    rvecs8 = np.load(f"{base_path}/res/rvecs8.npy")
-    tvecs8 = np.load(f"{base_path}/res/tvecs8.npy")
+    mtx8 = np.load(f"{base_path}/mtx8.npy")
+    dist8 = np.load(f"{base_path}/dist8.npy")
+    rvecs8 = np.load(f"{base_path}/rvecs8.npy")
+    tvecs8 = np.load(f"{base_path}/tvecs8.npy")
     #with open(f"{base_path}/res/objpoints8.pkl", "rb") as f: objpoints8 = pkl.load(f)
     #with open(f"{base_path}/res/imgp8.pkl", "rb") as f: imgp8 = pkl.load(f)
 
@@ -352,12 +364,12 @@ def main():
 
         print("b", b)
         print("bproj", bproj)
-        print("path", f"{base_path}/res/imgpoints/board{bproj}_imgp_*")
+        print("path", f"{base_path}/imgpoints/board{bproj}_imgp_*")
 
-        imgp_files = glob.glob(f"{base_path}/res/imgpoints/board{bproj}_imgp_*")
+        imgp_files = glob.glob(f"{base_path}/imgpoints/board{bproj}_imgp_*")
         imgp_files.sort()
 
-        objp_files = glob.glob(f"{base_path}/res/objpoints/board{bproj}_objp_*")
+        objp_files = glob.glob(f"{base_path}/objpoints/board{bproj}_objp_*")
         objp_files.sort()
 
         print("files", imgp_files)
@@ -419,8 +431,8 @@ def main():
 
             # set optimizer options
             optimizerOptions.maxIterations = 50
-            # optimizerOptions.nThreads = max(1, multiprocessing.cpu_count()-6)
-            optimizerOptions.nThreads = 1
+            optimizerOptions.nThreads = max(1, multiprocessing.cpu_count()-6)
+            #optimizerOptions.nThreads = 1
             optimizerOptions.verbose = True
 
             # set estimator options
@@ -434,6 +446,16 @@ def main():
 
             progress = sm.Progress2(num_views)
             progress.sample()
+
+            init_ps = []
+            init_ds = []
+
+            for board_idx, cam in enumerate(cams):
+                p = cam.geometry.projection().getParameters().flatten()
+                d = cam.geometry.projection().distortion().getParameters().flatten()
+
+                init_ps.append(p)
+                init_ds.append(d)
 
             # append problems for each image
             for i in range(num_views):
@@ -456,13 +478,13 @@ def main():
                     _, rvec, tvec = cv2.solvePnP(objps[board_idx][i], imgps[board_idx][i], build_camera_matrix(p), d)
                     transformations.append((rvec, tvec))
 
-                print(f"transformations for view #{i}: {transformations}")
+                # print(f"transformations for view #{i}: {transformations}")
 
                 Rs = [cv2.Rodrigues(rvec)[0] for rvec, _ in transformations]
                 ts = [tvec for _, tvec in transformations]
 
-                print(f"Rs: {Rs}")
-                print(f"ts: {ts}")
+                # print(f"Rs: {Rs}")
+                # print(f"ts: {ts}")
 
                 # object points of the current view
                 objps_view = [objps[b][i] for b in range(num_boards)]
@@ -475,12 +497,12 @@ def main():
                                                                                                 objpoints=objps_view,
                                                                                                 imgpoints=imgps_view)
 
-                print("batch_problem", batch_problem)
+                # print("batch_problem", batch_problem)
 
                 # add problem patch to estimator and solve it (call for "optimize" happens in the C code)
                 estimator_return_value = estimator.addBatch(batch_problem, force)
 
-                print("estimator_return_value", estimator_return_value)
+                # print("estimator_return_value", estimator_return_value)
 
                 if estimator_return_value.numIterations >= optimizerOptions.maxIterations:
                     sm.logError("Did not converge in maxIterations... restarting...")
@@ -500,6 +522,10 @@ def main():
                     d = cam.geometry.projection().distortion().getParameters().flatten()
                     p = cam.geometry.projection().getParameters().flatten()
 
+                    print(f"===[ Initial board {board_idx} ]=================================================")
+                    print(f"[ Cam {board_idx} ] distortion: {init_ds[board_idx]}")
+                    print(f"[ Cam {board_idx} ] projection (fx, fy, cx, cy): {init_ps[board_idx]}")
+                    print(" ")
                     print(f"===[ Optimized board {board_idx} ]=================================================")
                     print(f"[ Cam {board_idx} ] distortion: {d}")
                     print(f"[ Cam {board_idx} ] projection (fx, fy, cx, cy): {p}")
