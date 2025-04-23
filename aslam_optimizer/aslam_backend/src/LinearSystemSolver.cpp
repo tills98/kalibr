@@ -11,7 +11,6 @@ namespace aslam {
 
     void LinearSystemSolver::evaluateErrors(size_t threadId, size_t startIdx, size_t endIdx, bool useMEstimator)
     {
-      std::cout << "LinearSystemSolver::evaluateErrors " << threadId << " " << startIdx << " " << endIdx << " " << useMEstimator << std::endl;
       SM_ASSERT_LT_DBG(Exception, threadId, _threadLocalErrors.size(), "Index out of bounds in thread " << threadId);
       SM_ASSERT_LE_DBG(Exception, endIdx, _errorTerms.size(), "Index out of bounds in thread " << threadId);
       Eigen::VectorXd e;

@@ -1,0 +1,171 @@
+import numpy as np
+import glob
+from kalibr_camera_calibration.CameraCalibrator import OptimizationDiverged
+from kalibr_camera_calibration import kcc
+from kalibr_camera_calibration import sm
+import incremental_calibration as ic
+import aslam_backend as aopt
+import sm
+import aslam_cv as acv
+import aslam_cv_backend as acvb
+import kalibr_joint_cameras as kjc
+import cv2
+import signal
+import sys
+
+
+def signal_exit(signal, frame):
+    sm.logWarn("Shutdown requested! (CTRL+C)")
+    sys.exit(2)
+
+
+def build_camera_geometry(camera_intrinsics, distortions):
+    params = np.array([camera_intrinsics[0, 0], camera_intrinsics[1, 1], camera_intrinsics[0, 2], camera_intrinsics[1, 2]])
+    dist_coeff = distortions[0]
+
+    dist = acv.RadialTangentialDistortion(dist_coeff[0], dist_coeff[1], dist_coeff[2], dist_coeff[3])
+
+    proj = acv.DistortedPinholeProjection(params[0], params[1],
+                                            params[2], params[3],
+                                            6040, 4080,
+                                            dist)
+
+    geometry = acv.DistortedPinholeCameraGeometry(proj)
+
+    return geometry
+
+
+def build_camera_transformation(camera_intrinsics, distortions, objpoints, imgpoints):
+    # generate from opencv
+    _, rvec, tvec = cv2.solvePnP(objpoints, imgpoints, camera_intrinsics, distortions)
+
+    R, _ = cv2.Rodrigues(rvec)
+
+    # build transformation matrix
+    # TODO: how does tvec look like
+    T_tc_guess = np.eye(4)
+    T_tc_guess[0:3, 0:3] = R
+    T_tc_guess[0:3, 3] = tvec
+
+    return T_tc_guess
+
+
+def main():
+    verbose = True
+
+    #logging modes
+    if verbose:
+        sm.setLoggingLevel(sm.LoggingLevel.Debug)
+    else:
+        sm.setLoggingLevel(sm.LoggingLevel.Info)
+
+    #register signal handler
+    signal.signal(signal.SIGINT, signal_exit)
+
+    base_path = "/data"
+
+    print("load data")
+    
+    # load intrinsics, extrinsics and 3d points
+    mtx6 = np.load(f"{base_path}/mtx6.npy")
+    dist6 = np.load(f"{base_path}/dist6.npy")
+    rvecs6 = np.load(f"{base_path}/rvecs6.npy")
+    tvecs6 = np.load(f"{base_path}/tvecs6.npy")
+    #with open(f"{base_path}/res/objpoints6.pkl", "rb") as f: objpoints6 = pkl.load(f)
+    #with open(f"{base_path}/res/imgp6.pkl", "rb") as f: imgp6 = pkl.load(f)
+
+    mtx7 = np.load(f"{base_path}/mtx7.npy")
+    dist7 = np.load(f"{base_path}/dist7.npy")
+    rvecs7 = np.load(f"{base_path}/rvecs7.npy")
+    tvecs7 = np.load(f"{base_path}/tvecs7.npy")
+    #with open(f"{base_path}/res/objpoints7.pkl", "rb") as f: objpoints7 = pkl.load(f)
+    #with open(f"{base_path}/res/imgp7.pkl", "rb") as f: imgp7 = pkl.load(f)
+
+    mtx8 = np.load(f"{base_path}/mtx8.npy")
+    dist8 = np.load(f"{base_path}/dist8.npy")
+    rvecs8 = np.load(f"{base_path}/rvecs8.npy")
+    tvecs8 = np.load(f"{base_path}/tvecs8.npy")
+    #with open(f"{base_path}/res/objpoints8.pkl", "rb") as f: objpoints8 = pkl.load(f)
+    #with open(f"{base_path}/res/imgp8.pkl", "rb") as f: imgp8 = pkl.load(f)
+
+
+    if len(rvecs6) == 1 or len(rvecs7) == 1 or len(rvecs8) == 1:
+        print("Length of rvecs is 1, exiting")
+        return
+
+    # set number of boards
+    num_boards = 3
+
+    # load image and object points from our calibration data
+    print("load image and objpoints")
+    imgps = []
+    objps = []
+
+    for b in range(num_boards):
+        imgps.append([])
+        objps.append([])
+
+        # our board files are numerated by their shape on one axis (0 -> 6 -> 6x6 board, ...)
+        bproj = b + 6
+
+        print("b", b)
+        print("bproj", bproj)
+        print("path", f"{base_path}/imgpoints/board{bproj}_imgp_*")
+
+        imgp_files = glob.glob(f"{base_path}/imgpoints/board{bproj}_imgp_*")
+        imgp_files.sort()
+
+        objp_files = glob.glob(f"{base_path}/objpoints/board{bproj}_objp_*")
+        objp_files.sort()
+
+        print("files", imgp_files)
+        print("files", objp_files)
+
+        for file in imgp_files:
+            imgp = np.loadtxt(f"{file}")
+            imgps[b].append(imgp)
+
+        for file in objp_files:
+            o = np.loadtxt(f"{file}")
+            objps[b].append(o)
+
+
+    # prepare camera geometries
+    print("prepare camera and target geometries")
+    camera_intrinsics = [mtx6, mtx7, mtx8]
+    distortions = [dist6, dist7, dist8]
+
+    cameraList = list()
+    targetList = list()
+
+    for i in range(num_boards):
+        cam_geometry = build_camera_geometry(camera_intrinsics[i], distortions[i])
+        cam = kcc.CameraGeometry(cameraModel=kjc.cameraModels["pinhole-radtan"], targetConfig=None, dataset=None, geometry=cam_geometry)
+        cams.append(cam)
+
+        # generate transformation matrix
+        T_tc_guess = build_camera_transformation(camera_intrinsics[i], distortions[i], objps[i], imgps[i])
+
+        target = kjc.CameraCalibrationTarget(cam, T_tc_guess, objps[i], imgps[i])
+    
+
+    while True:
+        try:
+            # build camera geometry
+            cams = []
+
+            print("setup camera geometry for each board calibration")
+
+        except OptimizationDiverged as e:
+            restart_attempts -= 1
+            sm.logWarn(
+                "Optimization diverged possibly due to a bad initialization. (Do the models fit the lenses well?)")
+
+            if restart_attempts == 0:
+                sm.logError("Max. attemps reached... Giving up...")
+                break
+            else:
+                sm.logWarn("Restarting for a new attempt...")
+
+
+    

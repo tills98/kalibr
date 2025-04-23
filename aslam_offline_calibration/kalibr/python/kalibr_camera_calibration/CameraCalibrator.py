@@ -146,7 +146,7 @@ class CalibrationTarget(object):
         self.P_t_dv = P_t_dv
         self.P_t_ex = P_t_ex
     def getPoint(self,i):
-        return P_t_ex[i]
+        return self.P_t_ex[i]
 
 class CalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProblem):        
     @classmethod

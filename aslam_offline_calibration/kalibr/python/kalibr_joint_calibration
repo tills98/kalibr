@@ -142,7 +142,15 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
 
         print("cams", cams)
 
+        # create the problem object
         rval = JointCalibrationTargetOptimizationProblem()
+
+        rval.cams = cams
+        rval.Rs = Rs
+        rval.ts = ts
+        rval.objpoints = objpoints
+        rval.imgpoints = imgpoints
+
 
         rval.rerrs = dict()
 
@@ -175,6 +183,7 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
             T_target_cam_ex = T_target_cam_dv.toExpression()
 
             T_obj = {
+                "o": T_target_cam,
                 "tf": T_target_cam_tf,
                 "dv": T_target_cam_dv,
                 "ex": T_target_cam_ex
@@ -185,7 +194,7 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
             for i in range(0, T_target_cam_dv.numDesignVariables()):
                 rval.addDesignVariable(T_target_cam_dv.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
 
-        # add all points as design variables to our problem
+        # add all 3D world landmarks as design variables to our problem
         rval.Ps = dict()
         for board_idx in range(num_boards):
             rval.Ps[board_idx] = []
@@ -195,6 +204,7 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
             
             for i in range(len(P_t_dv)):
                 rval.Ps[board_idx].append({
+                    "o": objpoints[board_idx][i],
                     "hom": P_t_hom[i],
                     "dv": P_t_dv[i],
                     "ex": P_t_ex[i]
@@ -231,41 +241,42 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
             T_t1_t2_ex = T_t1_t2_dv.toExpression()
 
             T_obj = {
+                "o": T_t1_t2,
                 "tf": T_t1_t2_tf,
                 "dv": T_t1_t2_dv,
                 "ex": T_t1_t2_ex
             }
 
-            rval.Ts_target_target[(source_idx, target_idx)] = T_obj
+            #rval.Ts_target_target[(source_idx, target_idx)] = T_obj
 
             # add boards-in-between transformations as design variables to our problem
-            for i in range(0, T_t1_t2_dv.numDesignVariables()):
-                rval.addDesignVariable(T_t1_t2_dv.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
+            #for i in range(0, T_t1_t2_dv.numDesignVariables()):
+                #rval.addDesignVariable(T_t1_t2_dv.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
 
         rerr_idx = 0
 
-        # add all reprojection errors to our problem
-        for (s_idx, t_idx), T_obj in rval.Ts_target_target.items():
-            T_t1_t2_ex = T_obj["ex"]
-            T_t1_cam_ex = rval.Ts_target_cam[s_idx]["ex"]
-            T_t2_cam_ex = rval.Ts_target_cam[t_idx]["ex"]
+        # add basic reprojection errors to our problem
+        for b_idx, T_obj in rval.Ts_target_cam.items():
+            T_t_cam_ex = T_obj["ex"]
 
-            # copied from CameraCalibrator -> CalibrationTargetOptimizationProblem
-            # \todo pass in the detector uncertainty somehow.
-            cornerUncertainty = 1.0
-            R = np.eye(2) * cornerUncertainty * cornerUncertainty
-            invR = np.linalg.inv(R)
+            rval.rerrs[b_idx] = list()
 
-            rval.rerrs[s_idx] = list()
-
-            for y, p_t1 in zip(imgpoints[s_idx], rval.Ps[s_idx]):
-                cam_id = s_idx
+            for y, p_t in zip(imgpoints[b_idx], rval.Ps[b_idx]):
+                cam_id = b_idx
                 cam = cams[cam_id]
 
-                p_t1_ex = p_t1["ex"]
+                p_t_ex = p_t["ex"]
 
-                #projected_y_ex = T_t2_cam_ex * T_t1_t2_ex * p_t1_ex
-                projected_y_ex = T_t1_cam_ex * p_t1_ex
+                projected_y = T_obj["o"] @ p_t["hom"]
+                projected_y_ex = T_t_cam_ex * p_t_ex
+
+                print("projected_y: ", projected_y.flatten())
+
+                # copied from CameraCalibrator -> CalibrationTargetOptimizationProblem
+                # \todo pass in the detector uncertainty somehow.
+                cornerUncertainty = 1.0
+                R = np.eye(2) * cornerUncertainty * cornerUncertainty
+                invR = np.linalg.inv(R)
 
                 # y: real image point
                 # projected_y_ex: projected image point
@@ -278,11 +289,53 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
                 mest = aopt.BlakeZissermanMEstimator(2.0)
                 rerr.setMEstimatorPolicy(mest)
 
-                glob_rerrs[s_idx].append(rerr)
-
                 # add error term to the problem class
                 rval.addErrorTerm(rerr)
-                rval.rerrs[s_idx].append(rerr)
+                rval.rerrs[b_idx].append(rerr)
+
+            break
+
+        # # add all reprojection errors between boards to our problem
+        # for (s_idx, t_idx), T_obj in rval.Ts_target_target.items():
+        #     T_t1_t2_ex = T_obj["ex"]
+        #     T_t1_cam_ex = rval.Ts_target_cam[s_idx]["ex"]
+        #     T_t2_cam_ex = rval.Ts_target_cam[t_idx]["ex"]
+
+        #     # copied from CameraCalibrator -> CalibrationTargetOptimizationProblem
+        #     # \todo pass in the detector uncertainty somehow.
+        #     cornerUncertainty = 1.0
+        #     R = np.eye(2) * cornerUncertainty * cornerUncertainty
+        #     invR = np.linalg.inv(R)
+
+        #     rval.rerrs[s_idx] = list()
+
+        #     for y, p_t1 in zip(imgpoints[s_idx], rval.Ps[s_idx]):
+        #         cam_id = s_idx
+        #         cam = cams[cam_id]
+
+        #         p_t1_ex = p_t1["ex"]
+
+        #         #projected_y_ex = T_t2_cam_ex * T_t1_t2_ex * p_t1_ex
+        #         projected_y_ex = T_t1_cam_ex * p_t1_ex
+
+        #         # y: real image point
+        #         # projected_y_ex: projected image point
+        #         rerr = cam.model.reprojectionError(y, invR, projected_y_ex, cam.dv)
+        #         rerr.idx = rerr_idx
+
+        #         rerr_idx += 1
+
+        #         # add blake-zisserman mest
+        #         mest = aopt.BlakeZissermanMEstimator(2.0)
+        #         rerr.setMEstimatorPolicy(mest)
+
+        #         glob_rerrs[s_idx].append(rerr)
+
+        #         # add error term to the problem class
+        #         rval.addErrorTerm(rerr)
+        #         rval.rerrs[s_idx].append(rerr)
+
+        sm.logDebug("Adding a view with {0} cameras and {1} error terms".format(len(rval.rerrs), rerr_idx))
 
         return rval
 
