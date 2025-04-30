@@ -12,6 +12,7 @@ import kalibr_joint_cameras as kjc
 import cv2
 import signal
 import sys
+import multiprocessing
 
 
 def signal_exit(signal, frame):
@@ -41,11 +42,13 @@ def build_camera_transformation(camera_intrinsics, distortions, objpoints, imgpo
 
     R, _ = cv2.Rodrigues(rvec)
 
+    # r_quat = sm.r2quat(R)
+    # R = sm.quat2r(r_quat)
+
     # build transformation matrix
-    # TODO: how does tvec look like
     T_tc_guess = np.eye(4)
     T_tc_guess[0:3, 0:3] = R
-    T_tc_guess[0:3, 3] = tvec
+    T_tc_guess[0:3, 3] = tvec.flatten()
 
     return T_tc_guess
 
@@ -95,14 +98,15 @@ def main():
 
     # set number of boards
     num_boards = 3
+    numViews = len(rvecs6)
 
     # load image and object points from our calibration data
     print("load image and objpoints")
-    imgps = []
+    observations = []
     objps = []
 
     for b in range(num_boards):
-        imgps.append([])
+        observations.append([])
         objps.append([])
 
         # our board files are numerated by their shape on one axis (0 -> 6 -> 6x6 board, ...)
@@ -122,8 +126,8 @@ def main():
         print("files", objp_files)
 
         for file in imgp_files:
-            imgp = np.loadtxt(f"{file}")
-            imgps[b].append(imgp)
+            img_imgps = np.loadtxt(f"{file}")
+            observations[b].append(img_imgps)
 
         for file in objp_files:
             o = np.loadtxt(f"{file}")
@@ -135,26 +139,99 @@ def main():
     camera_intrinsics = [mtx6, mtx7, mtx8]
     distortions = [dist6, dist7, dist8]
 
-    cameraList = list()
-    targetList = list()
+    cameraList = list() # list of cameras
+    targetList = list() # list of target for each camera for each image
 
     for i in range(num_boards):
+        # generate camera geometry
         cam_geometry = build_camera_geometry(camera_intrinsics[i], distortions[i])
         cam = kcc.CameraGeometry(cameraModel=kjc.cameraModels["pinhole-radtan"], targetConfig=None, dataset=None, geometry=cam_geometry)
-        cams.append(cam)
+        cameraList.append(cam)
 
-        # generate transformation matrix
-        T_tc_guess = build_camera_transformation(camera_intrinsics[i], distortions[i], objps[i], imgps[i])
 
-        target = kjc.CameraCalibrationTarget(cam, T_tc_guess, objps[i], imgps[i])
-    
+    for img in range(len(observations[i])):
+        tL = list()
+        
+        for i in range(num_boards):
+            # generate transformation matrix and target for each image and each camera
+            T_tc_guess = build_camera_transformation(camera_intrinsics[i], distortions[i], objps[i][img], observations[i][img])
+            target = kjc.CameraCalibrationTarget(cameraList[i], T_tc_guess, objps[i][img], observations[i][img])
+            tL.append(target)
 
+        targetList.append(tL)
+
+
+    restart_attempts = 5
     while True:
         try:
-            # build camera geometry
-            cams = []
+            calibrator = kjc.CameraCalibration(cameraList, verbose=verbose, useBlakeZissermanMest=True)
 
-            print("setup camera geometry for each board calibration")
+            options = calibrator.estimator.getOptions()
+            # options.infoGainDelta = parsed.miTol
+            options.checkValidity = True
+            options.verbose = verbose
+            linearSolverOptions = calibrator.estimator.getLinearSolverOptions()
+            linearSolverOptions.columnScaling = True
+            linearSolverOptions.verbose = verbose
+            linearSolverOptions.epsSVD = 1e-6
+            #linearSolverOptions.svdTol = 0.0 #TODO
+            #linearSolverOptions.qrTol = 0.0
+
+            optimizerOptions = calibrator.estimator.getOptimizerOptions()
+            optimizerOptions.maxIterations = 50
+            optimizerOptions.nThreads = max(1, multiprocessing.cpu_count() - 1)
+            optimizerOptions.verbose = verbose
+
+            progress = sm.Progress2(numViews); progress.sample()
+
+            for view_id, img_targets in zip(range(numViews), targetList):
+                success = calibrator.addTargetView(img_targets, True)
+                progress.sample()
+
+                if (verbose or (view_id % 5) == 0):
+                    print("")
+                    print("------------------------------------------------------------------")
+                    print("")
+                    print("Processed {0} of {1} views with {2} views used".format(view_id+1, numViews, calibrator.estimator.getNumBatches()))
+                    print("")
+                    for cidx, cam in enumerate(cameraList):
+                        d = cam.geometry.projection().distortion().getParameters().flatten()
+                        p = cam.geometry.projection().getParameters().flatten()
+                        # dd = std_cameras[cidx][0:d.shape[0]]
+                        # dp = std_cameras[cidx][d.shape[0]:]
+                        print("cam{0}:".format(cidx)) 
+                        print("    type: %s" % ( type(cam.geometry) )) 
+                        print("    distortion: " % (d)) #, np.array(dd)
+                        print("    projection: " % (p)) #, np.array(dp)
+                        print("")
+                    print("")
+                    print("------------------------------------------------------------------")
+
+            # Final output
+            print("")
+            print("")
+            print("..................................................................")
+            print("")
+            print("Calibration complete.")
+            print("")
+            print("")
+            print("Processed {0} images with {1} images used".format(numViews, calibrator.estimator.getNumBatches()))
+            print("")
+            print("Final optimization result:")
+            # TODO: print new parameters
+
+            for cidx, cam in enumerate(cameraList):
+                d = cam.geometry.projection().distortion().getParameters().flatten()
+                p = cam.geometry.projection().getParameters().flatten()
+                # dd = std_cameras[cidx][0:d.shape[0]]
+                # dp = std_cameras[cidx][d.shape[0]:]
+                print("cam{0}:".format(cidx)) 
+                print("    type: %s" % ( type(cam.geometry) )) 
+                print("    distortion: %s +- %s" % (d)) #, np.array(dd)
+                print("    projection: %s +- %s" % (p)) #, np.array(dp)
+                print("")
+
+            print("")
 
         except OptimizationDiverged as e:
             restart_attempts -= 1
@@ -168,4 +245,5 @@ def main():
                 sm.logWarn("Restarting for a new attempt...")
 
 
-    
+if __name__ == "__main__":
+    main()

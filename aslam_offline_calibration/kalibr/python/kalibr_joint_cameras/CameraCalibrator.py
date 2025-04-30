@@ -73,11 +73,12 @@ class CameraCalibrationTarget(object):
 
 class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProblem):
     @classmethod
-    def fromTargetViewObservations(cls, cameras: list[kcc.CameraGeometry], targets: list[CameraCalibrationTarget], useBlakeZissermanMest=True):
+    def fromTargetViewObservations(cls, cameras, targets, useBlakeZissermanMest=True):
         """
-        Create a new optimization problem for the given target view observations.
+        Create a new optimization problem for the given target view observations in one image.
+
         :param cameras: list of cameras
-        :param targets: list of targets
+        :param targets: list of targets for all cameras in one image (|num_camera|)
         :param baselines: list of baselines
         :param T_tc_guess: guess for the transformation from target to camera
         :param rig_observations: list of observations for the cameras
@@ -94,14 +95,14 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
         # 1. Create a design variable for all camera poses
         rval.dv_Ts_target_camera = list()
         for target in targets:
-            T_target_camera = target.T_tc_guess
+            T_target_camera = sm.Transformation(target.T_tc_guess)
             
             dv_T_target_camera = aopt.TransformationDv(T_target_camera)
             rval.dv_Ts_target_camera.append(dv_T_target_camera)
 
             # add the design variable Transformation matrix to the problem
-            for i in range(0, rval.dv_T_target_camera.numDesignVariables()):
-                rval.addDesignVariable(rval.dv_T_target_camera.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
+            for i in range(0, dv_T_target_camera.numDesignVariables()):
+                rval.addDesignVariable(dv_T_target_camera.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
         
         # 2. add landmark DVs of all targets
         for target in targets:
@@ -110,8 +111,8 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
         
         # 3. add camera DVs
         for camera in cameras:
-            if not camera.isGeometryInitialized:
-                raise RuntimeError('The camera geometry is not initialized. Please initialize with initGeometry() or initGeometryFromDataset()')
+            # if not camera.isGeometryInitialized:
+            #     raise RuntimeError('The camera geometry is not initialized. Please initialize with initGeometry() or initGeometryFromDataset()')
             camera.setDvActiveStatus(True, True, False)
             rval.addDesignVariable(camera.dv.distortionDesignVariable(), CALIBRATION_GROUP_ID)
             rval.addDesignVariable(camera.dv.projectionDesignVariable(), CALIBRATION_GROUP_ID)
@@ -122,8 +123,8 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
         rerr_cnt = 0
 
         for target_id, target in enumerate(targets):
-            T_cam_target = rval.dv_T_target_camera.expression.inverse()
-            T_target_camera = target.T_tc_guess
+            T_cam_target = rval.dv_Ts_target_camera[target_id].expression.inverse()
+            # T_target_camera = target.T_tc_guess
 
             # \todo pass in the detector uncertainty somehow.
             cornerUncertainty = 1.0
@@ -157,31 +158,35 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
 
 
 class CameraCalibration(object):
-    def __init__(self, cameras: list[kcc.CameraGeometry], targets: list[CameraCalibrationTarget], estimateLandmarks=False, verbose=False, useBlakeZissermanMest=True):
+    def __init__(self, cameras, verbose=False, useBlakeZissermanMest=True):
+        """
+        :param cameras: list of kcc.CameraGeometry objects
+        :param targets: list of CameraCalibrationTarget objects
+        :param useBlakeZissermanMest: use Blake-Zisserman M-estimator
+        :param verbose: verbose output
+        """
         self.cameras = cameras
         self.useBlakeZissermanMest = useBlakeZissermanMest
         #create the incremental estimator
         self.estimator = ic.IncrementalEstimator(CALIBRATION_GROUP_ID)
         self.linearSolverOptions = self.estimator.getLinearSolverOptions()
         self.optimizerOptions = self.estimator.getOptimizerOptions()
-        self.targets = targets
+        self.verbose = verbose
 
         #storage for the used views
         self.views = list()
         
 
-    def addTargetView(self, timestamp, rig_observations, T_tc_guess, force=False):
+    def addTargetView(self, targets, force=False):
         """
         called for every timestamp with all observations at the given timestamp and the T_targetToCamera_guess
 
-        :param timestamp: given timestamp
-        :param rig_observations: observations at timestamp
-        :param T_tc_guess: Transformation matrix guess from target to camera
-        :param force:
+        :param targets: list of CameraCalibrationTarget objects, targets for each camera in the current image
+        :param force: save design variables in case the batch is rejected
         :return:
         """
-        #create the problem for this batch and try to add it 
-        batch_problem = JointCalibrationTargetOptimizationProblem.fromTargetViewObservations(self.cameras, self.targets, useBlakeZissermanMest=self.useBlakeZissermanMest)
+        #create the problem for this batch and try to add it
+        batch_problem = JointCalibrationTargetOptimizationProblem.fromTargetViewObservations(self.cameras, targets, useBlakeZissermanMest=self.useBlakeZissermanMest)
         self.estimator_return_value = self.estimator.addBatch(batch_problem, force)
         
         if self.estimator_return_value.numIterations >= self.optimizerOptions.maxIterations:
