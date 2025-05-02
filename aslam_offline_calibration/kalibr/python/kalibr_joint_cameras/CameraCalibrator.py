@@ -92,64 +92,113 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
         rval.cameras = cameras
         rval.targets = targets
         
-        # 1. Create a design variable for all camera poses
-        rval.dv_Ts_target_camera = list()
-        for target in targets:
-            T_target_camera = sm.Transformation(target.T_tc_guess)
-            
-            dv_T_target_camera = aopt.TransformationDv(T_target_camera)
-            rval.dv_Ts_target_camera.append(dv_T_target_camera)
+        target = targets[0]
+        camera = cameras[0]
 
-            # add the design variable Transformation matrix to the problem
-            for i in range(0, dv_T_target_camera.numDesignVariables()):
-                rval.addDesignVariable(dv_T_target_camera.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
-        
+        # 1. Create a design variable for first camera pose
+        T_target_camera = sm.Transformation(target.T_tc_guess)
+        rval.dv_T_target_camera = aopt.TransformationDv(T_target_camera) 
+        for i in range(0, rval.dv_T_target_camera.numDesignVariables()):
+            rval.addDesignVariable(rval.dv_T_target_camera.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
+
         # 2. add landmark DVs of all targets
-        for target in targets:
-            for p in target.P_t_dv: # P_t_dv = [p_t_dv] where p_t_dv = aopt.HomogeneousPointDv(points(i)), the corner points in its 3D world (x, y, 0)
-                rval.addDesignVariable(p, LANDMARK_GROUP_ID)
-        
+        for p in target.P_t_dv: # P_t_dv = [p_t_dv] where p_t_dv = aopt.HomogeneousPointDv(points(i)), the corner points in its 3D world (x, y, 0)
+            rval.addDesignVariable(p, LANDMARK_GROUP_ID)
+
         # 3. add camera DVs
-        for camera in cameras:
-            # if not camera.isGeometryInitialized:
-            #     raise RuntimeError('The camera geometry is not initialized. Please initialize with initGeometry() or initGeometryFromDataset()')
-            camera.setDvActiveStatus(True, True, False)
-            rval.addDesignVariable(camera.dv.distortionDesignVariable(), CALIBRATION_GROUP_ID)
-            rval.addDesignVariable(camera.dv.projectionDesignVariable(), CALIBRATION_GROUP_ID)
-            rval.addDesignVariable(camera.dv.shutterDesignVariable(), CALIBRATION_GROUP_ID)
-        
-        #4. add all observations for this view
+        camera.setDvActiveStatus(True, True, False)
+        rval.addDesignVariable(camera.dv.distortionDesignVariable(), CALIBRATION_GROUP_ID)
+        rval.addDesignVariable(camera.dv.projectionDesignVariable(), CALIBRATION_GROUP_ID)
+        rval.addDesignVariable(camera.dv.shutterDesignVariable(), CALIBRATION_GROUP_ID)
+
+        # 4. add all observations for this view
         rval.rerrs = dict()
         rerr_cnt = 0
 
-        for target_id, target in enumerate(targets):
-            T_cam_target = rval.dv_Ts_target_camera[target_id].expression.inverse()
-            # T_target_camera = target.T_tc_guess
+        T_target_cam = rval.dv_T_target_camera.expression # no .inverse() here, because we want to go from points on the target to the camera
 
-            # \todo pass in the detector uncertainty somehow.
-            cornerUncertainty = 1.0
-            R = np.eye(2) * cornerUncertainty * cornerUncertainty
-            invR = np.linalg.inv(R)
+        # \todo pass in the detector uncertainty somehow.
+        cornerUncertainty = 1.0
+        R = np.eye(2) * cornerUncertainty * cornerUncertainty
+        invR = np.linalg.inv(R)
 
-            rval.rerrs[target_id] = list()
+        rval.rerrs = list()
 
-            # iterate the target points
-            for i in range(0, len(target.P_t_ex)):
-                p_target = target.P_t_ex[i]
-                y = target.observations[i]
+        # iterate the target points
+        for i in range(0, len(target.P_t_ex)):
+            p_target = target.P_t_ex[i]
+            y = target.observations[i]
+            
+            rerr_cnt += 1
+            rerr = camera.model.reprojectionError(y, invR, T_target_cam * p_target, camera.dv)
+            rerr.idx = rerr_cnt
+
+            if useBlakeZissermanMest:
+                mest = aopt.BlakeZissermanMEstimator(2.0)
+                rerr.setMEstimatorPolicy(mest)
+
+            rval.addErrorTerm(rerr)
+            rval.rerrs.append(rerr)
+
+        # # ---- old code ----
+        # # 1. Create a design variable for all camera poses
+        # rval.dv_Ts_target_camera = list()
+        # for target in targets:
+        #     T_target_camera = sm.Transformation(target.T_tc_guess)
+            
+        #     dv_T_target_camera = aopt.TransformationDv(T_target_camera)
+        #     rval.dv_Ts_target_camera.append(dv_T_target_camera)
+
+        #     # add the design variable Transformation matrix to the problem
+        #     for i in range(0, dv_T_target_camera.numDesignVariables()):
+        #         rval.addDesignVariable(dv_T_target_camera.getDesignVariable(i), TRANSFORMATION_GROUP_ID)
+        
+        # # 2. add landmark DVs of all targets
+        # for target in targets:
+        #     for p in target.P_t_dv: # P_t_dv = [p_t_dv] where p_t_dv = aopt.HomogeneousPointDv(points(i)), the corner points in its 3D world (x, y, 0)
+        #         rval.addDesignVariable(p, LANDMARK_GROUP_ID)
+        
+        # # 3. add camera DVs
+        # for camera in cameras:
+        #     # if not camera.isGeometryInitialized:
+        #     #     raise RuntimeError('The camera geometry is not initialized. Please initialize with initGeometry() or initGeometryFromDataset()')
+        #     camera.setDvActiveStatus(True, True, False)
+        #     rval.addDesignVariable(camera.dv.distortionDesignVariable(), CALIBRATION_GROUP_ID)
+        #     rval.addDesignVariable(camera.dv.projectionDesignVariable(), CALIBRATION_GROUP_ID)
+        #     rval.addDesignVariable(camera.dv.shutterDesignVariable(), CALIBRATION_GROUP_ID)
+        
+        # #4. add all observations for this view
+        # rval.rerrs = dict()
+        # rerr_cnt = 0
+
+        # for target_id, target in enumerate(targets):
+        #     T_cam_target = rval.dv_Ts_target_camera[target_id].expression  # no .inverse() here, because we want to go from points on the target to the camera
+        #     # T_target_camera = target.T_tc_guess
+
+        #     # \todo pass in the detector uncertainty somehow.
+        #     cornerUncertainty = 1.0
+        #     R = np.eye(2) * cornerUncertainty * cornerUncertainty
+        #     invR = np.linalg.inv(R)
+
+        #     rval.rerrs[target_id] = list()
+
+        #     # iterate the target points
+        #     for i in range(0, len(target.P_t_ex)):
+        #         p_target = target.P_t_ex[i]
+        #         y = target.observations[i]
                 
-                # iterate over all cameras
-                for camera in cameras:
-                    rerr_cnt += 1
-                    rerr = camera.model.reprojectionError(y, invR, T_cam_target * p_target, camera.dv)
-                    rerr.idx = rerr_cnt
+        #         # iterate over all cameras
+        #         for camera in cameras:
+        #             rerr_cnt += 1
+        #             rerr = camera.model.reprojectionError(y, invR, T_cam_target * p_target, camera.dv)
+        #             rerr.idx = rerr_cnt
 
-                    if useBlakeZissermanMest:
-                        mest = aopt.BlakeZissermanMEstimator(2.0)
-                        rerr.setMEstimatorPolicy(mest)
+        #             if useBlakeZissermanMest:
+        #                 mest = aopt.BlakeZissermanMEstimator(2.0)
+        #                 rerr.setMEstimatorPolicy(mest)
 
-                    rval.addErrorTerm(rerr)
-                    rval.rerrs[target_id].append(rerr)
+        #             rval.addErrorTerm(rerr)
+        #             rval.rerrs[target_id].append(rerr)
 
         
         sm.logDebug("Adding a view with {0} error terms.".format(rerr_cnt))

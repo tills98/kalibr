@@ -194,16 +194,18 @@ def main():
                     print("")
                     print("Processed {0} of {1} views with {2} views used".format(view_id+1, numViews, calibrator.estimator.getNumBatches()))
                     print("")
-                    for cidx, cam in enumerate(cameraList):
-                        d = cam.geometry.projection().distortion().getParameters().flatten()
-                        p = cam.geometry.projection().getParameters().flatten()
-                        # dd = std_cameras[cidx][0:d.shape[0]]
-                        # dp = std_cameras[cidx][d.shape[0]:]
-                        print("cam{0}:".format(cidx)) 
-                        print("    type: %s" % ( type(cam.geometry) )) 
-                        print("    distortion: " % (d)) #, np.array(dd)
-                        print("    projection: " % (p)) #, np.array(dp)
-                        print("")
+                    # for cidx, cam in enumerate(cameraList):
+                    cidx = 0
+                    cam = cameraList[cidx]
+                    d = cam.geometry.projection().distortion().getParameters().flatten()
+                    p = cam.geometry.projection().getParameters().flatten()
+                    # dd = std_cameras[cidx][0:d.shape[0]]
+                    # dp = std_cameras[cidx][d.shape[0]:]
+                    print("cam{0}:".format(cidx)) 
+                    print("    type: %s" % ( type(cam.geometry) )) 
+                    print("    distortion: " % (d)) #, np.array(dd)
+                    print("    projection: " % (p)) #, np.array(dp)
+                    print("")
                     print("")
                     print("------------------------------------------------------------------")
 
