@@ -32,7 +32,7 @@ cameraModels = { 'pinhole-radtan': acvb.DistortedPinhole,
 #DV group IDs
 CALIBRATION_GROUP_ID = 0
 TRANSFORMATION_GROUP_ID = 1
-LANDMARK_GROUP_ID = 2
+LANDMARK_GROUP_START_ID = 10
 
 class CameraCalibrationTarget(object):
     """
@@ -95,7 +95,13 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
         target = targets[0]
         camera = cameras[0]
 
-        # 1. Create a design variable for first camera pose
+        # 1. add camera DVs
+        camera.setDvActiveStatus(True, True, False)
+        rval.addDesignVariable(camera.dv.distortionDesignVariable(), CALIBRATION_GROUP_ID)
+        rval.addDesignVariable(camera.dv.projectionDesignVariable(), CALIBRATION_GROUP_ID)
+        rval.addDesignVariable(camera.dv.shutterDesignVariable(), CALIBRATION_GROUP_ID)
+
+        # 2. Create a design variable for first camera pose
         T_target_camera = sm.Transformation(target.T_tc_guess)
         rval.dv_T_target_camera = aopt.TransformationDv(T_target_camera) 
         for i in range(0, rval.dv_T_target_camera.numDesignVariables()):
@@ -103,19 +109,13 @@ class JointCalibrationTargetOptimizationProblem(ic.CalibrationOptimizationProble
 
         # 2. add landmark DVs of all targets
         for p in target.P_t_dv: # P_t_dv = [p_t_dv] where p_t_dv = aopt.HomogeneousPointDv(points(i)), the corner points in its 3D world (x, y, 0)
-            rval.addDesignVariable(p, LANDMARK_GROUP_ID)
-
-        # 3. add camera DVs
-        camera.setDvActiveStatus(True, True, False)
-        rval.addDesignVariable(camera.dv.distortionDesignVariable(), CALIBRATION_GROUP_ID)
-        rval.addDesignVariable(camera.dv.projectionDesignVariable(), CALIBRATION_GROUP_ID)
-        rval.addDesignVariable(camera.dv.shutterDesignVariable(), CALIBRATION_GROUP_ID)
+            rval.addDesignVariable(p, LANDMARK_GROUP_START_ID)
 
         # 4. add all observations for this view
         rval.rerrs = dict()
         rerr_cnt = 0
 
-        T_target_cam = rval.dv_T_target_camera.expression # no .inverse() here, because we want to go from points on the target to the camera
+        T_target_cam = rval.dv_T_target_camera.expression # no .inverse() here, because we want to go from target points to the camera
 
         # \todo pass in the detector uncertainty somehow.
         cornerUncertainty = 1.0

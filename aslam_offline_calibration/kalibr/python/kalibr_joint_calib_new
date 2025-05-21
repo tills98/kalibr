@@ -160,6 +160,11 @@ def main():
 
         targetList.append(tL)
 
+    init_ds = []
+    init_ps = []
+    for c in cameraList:
+        init_ds.append(c.geometry.projection().distortion().getParameters().flatten().copy())
+        init_ps.append(c.geometry.projection().getParameters().flatten().copy())
 
     restart_attempts = 5
     while True:
@@ -178,7 +183,7 @@ def main():
             #linearSolverOptions.qrTol = 0.0
 
             optimizerOptions = calibrator.estimator.getOptimizerOptions()
-            optimizerOptions.maxIterations = 50
+            optimizerOptions.maxIterations = 100
             optimizerOptions.nThreads = max(1, multiprocessing.cpu_count() - 1)
             optimizerOptions.verbose = verbose
 
@@ -187,6 +192,12 @@ def main():
             for view_id, img_targets in zip(range(numViews), targetList):
                 success = calibrator.addTargetView(img_targets, True)
                 progress.sample()
+
+                d = cam.geometry.projection().distortion().getParameters().flatten()
+                p = cam.geometry.projection().getParameters().flatten()
+                if np.isnan(d).any() or np.isnan(p).any():
+                    sm.logError("NaN in distortion parameters")
+                    raise OptimizationDiverged("NaN in distortion parameters")
 
                 if (verbose or (view_id % 5) == 0):
                     print("")
@@ -197,14 +208,16 @@ def main():
                     # for cidx, cam in enumerate(cameraList):
                     cidx = 0
                     cam = cameraList[cidx]
-                    d = cam.geometry.projection().distortion().getParameters().flatten()
-                    p = cam.geometry.projection().getParameters().flatten()
+
+                    delta_d = d - init_ds[cidx]
+                    delta_p = p - init_ps[cidx]
+
                     # dd = std_cameras[cidx][0:d.shape[0]]
                     # dp = std_cameras[cidx][d.shape[0]:]
-                    print("cam{0}:".format(cidx)) 
-                    print("    type: %s" % ( type(cam.geometry) )) 
-                    print("    distortion: " % (d)) #, np.array(dd)
-                    print("    projection: " % (p)) #, np.array(dp)
+                    print(f"cam{cidx}:") 
+                    print(f"    type: {type(cam.geometry)}") 
+                    print(f"    distortion: {d} +-{delta_d}" ) #, np.array(dd)
+                    print(f"    projection: {p} +-{delta_p}") #, np.array(dp)
                     print("")
                     print("")
                     print("------------------------------------------------------------------")
@@ -225,15 +238,23 @@ def main():
             for cidx, cam in enumerate(cameraList):
                 d = cam.geometry.projection().distortion().getParameters().flatten()
                 p = cam.geometry.projection().getParameters().flatten()
+
+                delta_d = d - init_ds[cidx]
+                delta_p = p - init_ps[cidx]
+
                 # dd = std_cameras[cidx][0:d.shape[0]]
                 # dp = std_cameras[cidx][d.shape[0]:]
-                print("cam{0}:".format(cidx)) 
-                print("    type: %s" % ( type(cam.geometry) )) 
-                print("    distortion: %s +- %s" % (d)) #, np.array(dd)
-                print("    projection: %s +- %s" % (p)) #, np.array(dp)
+                print(f"cam{cidx}:") 
+                print(f"    type: {type(cam.geometry)}") 
+                print(f"    distortion: {d} +-{delta_d}" ) #, np.array(dd)
+                print(f"    projection: {p} +-{delta_p}") #, np.array(dp)
                 print("")
+                print("")
+                print("------------------------------------------------------------------")
 
             print("")
+
+            break
 
         except OptimizationDiverged as e:
             restart_attempts -= 1
@@ -245,6 +266,8 @@ def main():
                 break
             else:
                 sm.logWarn("Restarting for a new attempt...")
+
+    print("quiting.")
 
 
 if __name__ == "__main__":
